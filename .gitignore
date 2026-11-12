@@ -1,0 +1,10 @@
+# Podaci o pacijentima ne idu u git
+data-pdf/
+data-json/
+
+.venv/
+__pycache__/
+*.pyc
+frontend/node_modules/
+
+# frontend/dist se namjerno cuva u gitu: korisnicima tada ne treba Node.js
