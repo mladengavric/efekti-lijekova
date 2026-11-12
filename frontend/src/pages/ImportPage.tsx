@@ -1,5 +1,5 @@
-import { Fragment, useRef, useState } from 'react'
-import { api, type ImportResult } from '../api'
+import { Fragment, useEffect, useRef, useState } from 'react'
+import { api, type ImportResult, type NameRow } from '../api'
 import { fmtDate, fmtInt, fmtKM, type ReportSummary } from '../data'
 import { Card } from '../components/Chart'
 
@@ -21,6 +21,62 @@ function Checks({ r }: { r: ReportSummary }) {
       ))}
       {r.kontrola.upozorenja.map((w, i) => <li key={'w' + i}>! {w}</li>)}
     </ul>
+  )
+}
+
+const SUSPECT = /t(?=[bcčćdđfghklmnpsšzž])|f(?=[bcčćdđfghkmnpsštvzž])/
+
+function Names({ reports, reload }: { reports: ReportSummary[]; reload: () => void }) {
+  const [rows, setRows] = useState<NameRow[] | null>(null)
+  const [edit, setEdit] = useState<Record<string, string>>({})
+  const [msg, setMsg] = useState('')
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    api.names().then((r) => { setRows(r); setEdit(Object.fromEntries(r.map((x) => [x.pdf, x.naziv]))) }).catch((e) => setMsg(e.message))
+  }, [reports])
+  if (!rows || !rows.length) return null
+  const dirty = rows.some((r) => (edit[r.pdf] ?? '').trim() !== r.naziv)
+  const save = () => {
+    setBusy(true); setMsg('')
+    api.saveNames(edit)
+      .then((r) => { setMsg(`Sačuvano. Izmijenjeno izvještaja: ${r.izmijenjeno_izvjestaja}.`); reload() })
+      .catch((e) => setMsg(e.message))
+      .finally(() => setBusy(false))
+  }
+  return (
+    <Card title="Nazivi ustanova i timova"
+      note="FZO RS PDF ponekad izgubi slovo „i” iza „t” ili „f” (npr. „Svet Luka” umjesto „Sveti Luka”). Česte riječi se ispravljaju same; ostale nazive ispravite ovdje. Ispravka se primjenjuje na sve uvezene izvještaje i na svaki budući uvoz."
+      actions={<button className="btn primary" disabled={!dirty || busy} onClick={save}>{busy ? 'Čuvam…' : 'Sačuvaj ispravke'}</button>}>
+      {msg && <p className="note" style={{ marginBottom: 8 }}>{msg}</p>}
+      <div className="dt-scroll">
+        <table className="names">
+          <thead>
+            <tr>
+              {['Vrsta', 'Šifra', 'Naziv iz PDF-a', 'Naziv u aplikaciji', ''].map((h, i) => <th className="plain" key={i}>{h}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => {
+              const v = edit[r.pdf] ?? ''
+              return (
+                <tr key={r.vrsta + r.pdf}>
+                  <td>{r.vrsta === 'ustanova' ? 'Ustanova' : 'Tim'}</td>
+                  <td>{r.sifra ?? '–'}</td>
+                  <td>{r.pdf}</td>
+                  <td><input className="name-input" value={v} aria-label={'Naziv za ' + r.pdf}
+                    onChange={(e) => setEdit({ ...edit, [r.pdf]: e.target.value })} /></td>
+                  <td>
+                    {v.trim() && v.trim() !== r.pdf
+                      ? <span className="badge ok">Ispravljeno</span>
+                      : SUSPECT.test(r.pdf) ? <span className="badge warn" title="Možda nedostaje slovo „i” iza „t” ili „f”">Provjerite</span> : null}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Card>
   )
 }
 
@@ -122,6 +178,8 @@ export default function ImportPage({ reports, reload }: { reports: ReportSummary
           </table>
         </div>
       </Card>
+      <div style={{ height: 16 }} />
+      <Names reports={reports} reload={reload} />
     </>
   )
 }

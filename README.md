@@ -11,6 +11,7 @@ Aplikacija radi samo na računaru na kome je pokrenuta (`127.0.0.1`). Podaci o p
 ## Mogućnosti
 
 - **Import PDF-a**: jedan ili više FZO RS izvještaja odjednom (prevlačenjem ili iz foldera `data-pdf`). Period, ustanova, timovi i kolone čitaju se iz samog PDF-a, pa aplikacija radi i sa budućim izvještajima, novim timovima i novim godinama.
+- **Ispravka naziva**: FZO RS PDF gubi slovo „i” iza „t” i „f” (npr. „Svet Luka” umjesto „Sveti Luka”, „tm” umjesto „tim”). Česte riječi se ispravljaju same, a ostali nazivi ustanove i timova ispravljaju se na stranici *Import FZO PDF-a* i ta ispravka važi i za sve buduće uvoze.
 - **Kontrola ispravnosti** svakog izvještaja: zbir pacijenata = zbir tima, zbir timova = ukupno ustanove, formule kolona (1 = 2 + 3, 3 = 3a + 3b + 3c + 3d).
 - **Praćenje po mjesecima**: izvještaji FZO RS su kumulativni (od 1. januara), pa se iznos za svaki mjesec računa kao razlika dva uzastopna izvještaja. Nedostajući mjeseci se spajaju u jedan period.
 - **Analize**:

@@ -54,10 +54,13 @@ def _lines(page) -> list[list[tuple]]:
     return lines
 
 
-# Font u izvjestaju gubi "i" iza "t" (ligatura "ti"), pa se poznati nazivi poprave.
+# FZO RS PDF za ligature "ti" i "fi" upisuje samo "t" odnosno "f", pa se slovo "i"
+# gubi vec u samom PDF-u. Ovdje se vracaju samo opsta pravila koja vaze za bilo
+# koju ustanovu; ostalo korisnik ispravlja u aplikaciji (Import -> Nazivi).
 _NAME_FIXES = [
-    (r"\bSvet (?=[A-ZČĆŠĐŽ])", "Sveti "), (r"\bNepoznat tm\b", "Nepoznat tim"),
-    (r"Neverifkovani", "Neverifikovani"), (r"Specijalistčki", "Specijalistički"),
+    (r"\b([Tt])m\b", r"\1im"),
+    (r"stč", "stič"), (r"stk", "stik"), (r"fk", "fik"),
+    (r"\bSvet (?=\w)", "Sveti "),
     (r'(\w)" (\w[^"]*")', r'\1 "\2'),
 ]
 

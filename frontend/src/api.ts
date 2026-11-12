@@ -24,7 +24,13 @@ export const api = {
     return fetch('/api/import', { method: 'POST', body: fd }).then((r) => j<ImportResult[]>(r))
   },
   importFolder: () => fetch('/api/import-folder', { method: 'POST' }).then((r) => j<ImportResult[]>(r)),
+  names: () => fetch('/api/nazivi').then((r) => j<NameRow[]>(r)),
+  saveNames: (ispravke: Record<string, string>) => fetch('/api/nazivi', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ispravke }),
+  }).then((r) => j<{ ok: boolean; izmijenjeno_izvjestaja: number }>(r)),
 }
+
+export type NameRow = { vrsta: 'ustanova' | 'tim'; sifra: string | null; pdf: string; naziv: string }
 
 function download(blob: Blob, name: string) {
   const a = document.createElement('a')

@@ -54,22 +54,68 @@ def _save(p: Path, d: dict) -> None:
 _cache: dict[str, tuple[float, dict]] = {}
 
 
+def _report_files() -> list[Path]:
+    return [p for p in DATA_JSON.glob("*.json") if not p.name.startswith("_")]
+
+
+def _entry(p: Path) -> dict:
+    mtime = p.stat().st_mtime
+    hit = _cache.get(p.name)
+    if not hit or hit[0] != mtime:
+        d = _load(p)
+        hit = (p.stat().st_mtime, {
+            "summary": {"id": d["id"], "meta": d["meta"], "kolone": d["kolone"],
+                        "ukupno": d["ukupno"], "kontrola": d["kontrola"]},
+            "timovi": [(t.get("sifra"), t.get("naziv_pdf") or t["naziv"], t["naziv"]) for t in d["timovi"]],
+        })
+        _cache[p.name] = hit
+    return hit[1]
+
+
 def _summaries() -> list[dict]:
-    out, alive = [], set()
-    for p in DATA_JSON.glob("*.json"):
-        alive.add(p.name)
-        mtime = p.stat().st_mtime
-        hit = _cache.get(p.name)
-        if not hit or hit[0] != mtime:
-            d = _load(p)
-            hit = (p.stat().st_mtime, {"id": d["id"], "meta": d["meta"], "kolone": d["kolone"],
-                                       "ukupno": d["ukupno"], "kontrola": d["kontrola"]})
-            _cache[p.name] = hit
-        out.append(hit[1])
-    for k in set(_cache) - alive:
+    files = _report_files()
+    out = [_entry(p)["summary"] for p in files]
+    for k in set(_cache) - {p.name for p in files}:
         del _cache[k]
     out.sort(key=lambda r: (r["meta"].get("ustanova_sifra") or "", r["meta"]["period_do"]))
     return out
+
+
+NAMES_FILE = DATA_JSON / "_ispravke-naziva.json"
+
+
+def _name_fixes() -> dict[str, str]:
+    try:
+        return json.loads(NAMES_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def _apply_names(d: dict, fixes: dict[str, str]) -> bool:
+    changed = False
+
+    def fix(obj: dict, key: str) -> None:
+        nonlocal changed
+        orig = obj.get(key + "_pdf") or obj.get(key)
+        if orig is None:
+            return
+        new = fixes.get(orig, orig)
+        if new != orig:
+            want = {key: new, key + "_pdf": orig}
+        else:
+            want = {key: orig, key + "_pdf": None}
+        for k, v in want.items():
+            if obj.get(k) != v:
+                changed = True
+                if v is None:
+                    obj.pop(k, None)
+                else:
+                    obj[k] = v
+
+    fix(d["meta"], "ustanova_naziv")
+    for t in d["timovi"]:
+        fix(t, "naziv")
+    return changed
 
 
 def _import_pdf(pdf_path: str, name: str) -> dict:
@@ -83,6 +129,7 @@ def _import_pdf(pdf_path: str, name: str) -> dict:
     target = DATA_JSON / f"{rid}.json"
     replaced = target.exists()
     data["id"] = rid
+    _apply_names(data, _name_fixes())
     _save(target, data)
     summary = next(r for r in _summaries() if r["id"] == rid)
     return {"fajl": name, "ok": True, "zamijenjen": replaced, "izvjestaj": summary}
@@ -108,6 +155,38 @@ def delete_report(rid: str):
         raise HTTPException(404, "Izvještaj ne postoji.")
     p.unlink()
     return {"ok": True}
+
+
+class NamesBody(BaseModel):
+    ispravke: dict[str, str]
+
+
+@app.get("/api/nazivi")
+def list_names():
+    fixes = _name_fixes()
+    seen: dict[tuple, dict] = {}
+    for p in _report_files():
+        e = _entry(p)
+        m = e["summary"]["meta"]
+        items = [("ustanova", m.get("ustanova_sifra"), m.get("ustanova_naziv_pdf") or m.get("ustanova_naziv"))]
+        items += [("tim", s, orig) for s, orig, _ in e["timovi"]]
+        for vrsta, sifra, orig in items:
+            if orig and (vrsta, orig) not in seen:
+                seen[(vrsta, orig)] = {"vrsta": vrsta, "sifra": sifra, "pdf": orig, "naziv": fixes.get(orig, orig)}
+    return sorted(seen.values(), key=lambda x: (x["vrsta"] != "ustanova", x["pdf"]))
+
+
+@app.put("/api/nazivi")
+def save_names(body: NamesBody):
+    fixes = {k: v.strip() for k, v in body.ispravke.items() if v and v.strip() and v.strip() != k}
+    NAMES_FILE.write_text(json.dumps(fixes, ensure_ascii=False, indent=1), encoding="utf-8")
+    n = 0
+    for p in _report_files():
+        d = _load(p)
+        if _apply_names(d, fixes):
+            _save(p, d)
+            n += 1
+    return {"ok": True, "izmijenjeno_izvjestaja": n}
 
 
 @app.get("/api/dataset")
@@ -313,4 +392,4 @@ if DIST.exists():
         f = DIST / full_path
         if full_path and f.is_file() and DIST in f.resolve().parents:
             return FileResponse(f)
-        return FileResponse(DIST / "index.html")
+        return FileResponse(DIST / "index.html", headers={"Cache-Control": "no-cache"})
